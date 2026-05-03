@@ -1,0 +1,49 @@
+# Resolve react_native_pods.rb with node to allow for hoisting
+require Pod::Executable.execute_command('node', ['-p',
+  'require.resolve(
+    "react-native/scripts/react_native_pods.rb",
+    {paths: [process.argv[1]]},
+  )', __dir__]).strip
+
+platform :ios, min_ios_version_supported
+prepare_react_native_project!
+
+linkage = ENV['USE_FRAMEWORKS']
+if linkage != nil
+  Pod::UI.puts "Configuring Pod with #{linkage}ally linked Frameworks".green
+  use_frameworks! :linkage => linkage.to_sym
+end
+
+target 'CodeDeneme' do
+  config = use_native_modules!
+
+  use_react_native!(
+    :path => config[:reactNativePath],
+    # An absolute path to your application root.
+    :app_path => "#{Pod::Config.instance.installation_root}/.."
+  )
+
+ # --- POST_INSTALL BLOĞU BURADAN BAŞLIYOR ---
+   post_install do |installer|
+     installer.pods_project.targets.each do |target|
+       target.build_configurations.each do |config|
+
+         # C++ Standardını 17'ye sabitleyen kritik ayar
+         config.build_settings['CLANG_CXX_LANGUAGE_STANDARD'] = 'gnu++17'
+
+         # Sandbox hatasını önlemek için
+         config.build_settings['ENABLE_USER_SCRIPT_SANDBOXING'] = 'NO'
+
+         # fmt hatasını susturmak için
+         if target.name == 'fmt'
+           config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)', 'FMT_USE_NON_CONSTEXPR_FORMAT=1']
+         end
+
+       end
+       # React Native Apple Silicon (M1/M2/M3) fix
+       react_native_post_install(installer)
+     end
+   end
+   # --- POST_INSTALL BLOĞU BURADA BİTİYOR ---
+
+ end # <--- BU 'END' TARGET BLOĞUNU KAPATIR, ÇOK ÖNEMLİ!
